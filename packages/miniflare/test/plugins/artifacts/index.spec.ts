@@ -262,19 +262,10 @@ test("artifacts: config update closes retired sidecars but abort preserves activ
 	}
 });
 
-test("artifacts: omitted remote preserves remote routing without host Git", async ({
-	expect,
-}) => {
-	const root = await useTmp();
-	const previousPath = process.env.PATH;
-	process.env.PATH = root;
-	try {
-		const mf = new Miniflare(options("test", "REPOS", null));
-		useDispose(mf);
-		await expect(mf.ready).resolves.toBeDefined();
-	} finally {
-		process.env.PATH = previousPath;
-	}
+test("artifacts: omitted remote remains offline", async ({ expect }) => {
+	const mf = new Miniflare(options("test", "REPOS", null));
+	useDispose(mf);
+	expect((await rpc(mf, "create", ["offline"])).name).toBe("offline");
 });
 
 test("artifacts: rejects invalid local namespace before starting services", async ({
@@ -899,14 +890,16 @@ test("artifacts: missing Git gives an actionable error during local startup", as
 	const previousPath = process.env.PATH;
 	process.env.PATH = root;
 	try {
-		const mf = new Miniflare(options());
-		await expect(mf.ready).rejects.toThrow(
-			/Local Artifacts requires Git installed on the host and available on PATH.*Install Git.*git --version.*restart/i
-		);
-		// dispose() preserves the startup error after cleaning up the instance.
-		await expect(mf.dispose()).rejects.toThrow(
-			/Local Artifacts requires Git installed on the host and available on PATH/
-		);
+		for (const remote of [false, null]) {
+			const mf = new Miniflare(options("test", "REPOS", remote));
+			await expect(mf.ready).rejects.toThrow(
+				/Local Artifacts requires Git installed on the host and available on PATH.*Install Git.*git --version.*restart/i
+			);
+			// dispose() preserves the startup error after cleaning up the instance.
+			await expect(mf.dispose()).rejects.toThrow(
+				/Local Artifacts requires Git installed on the host and available on PATH/
+			);
+		}
 		await expect(startGitSidecar(path.join(root, "repos"))).rejects.toThrow(
 			/Local Artifacts requires Git installed on the host and available on PATH/
 		);
